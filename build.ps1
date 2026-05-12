@@ -38,25 +38,30 @@ function Fail($m){
 
 function DL($url,$out,$label){
     Say "downloading $label"
-    $ok = $false
-    # Try BITS first (nice progress, no stderr nonsense).
+    Say "  url: $url"
+    Say "  dst: $out"
+    if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
+    # Use .NET WebClient.DownloadFile - synchronous, works everywhere, no BITS service.
     try {
-        Import-Module BitsTransfer -ErrorAction SilentlyContinue
-        if (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
-            Start-BitsTransfer -Source $url -Destination $out -ErrorAction Stop
-            $ok = $true
-        }
-    } catch { $ok = $false }
-    if (-not $ok) {
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
-            $ok = $true
-        } catch { $ok = $false }
-    }
-    if (-not $ok -or -not (Test-Path $out)) {
-        Fail "download failed: $url"
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add('User-Agent','Mozilla/5.0')
+        $wc.DownloadFile($url, $out)
+        $wc.Dispose()
+    } catch {
+        Fail "download failed ($label): $($_.Exception.Message)"
         return $false
     }
+    if (-not (Test-Path $out)) {
+        Fail "download did not produce a file at $out"
+        return $false
+    }
+    $size = (Get-Item $out).Length
+    if ($size -lt 1024) {
+        Fail "downloaded file too small: $size bytes"
+        return $false
+    }
+    Say "  OK, $([math]::Round($size / 1MB, 1)) MB"
     return $true
 }
 
@@ -180,6 +185,7 @@ function Main {
             Say 'running gradle wrapper...'
             Run-Cmd 'gradle wrapper --gradle-version 8.10 --no-daemon 2>&1'
             if (-not (Test-Path '.\gradlew.bat')) { Fail 'gradle wrapper did not create gradlew.bat'; return }
+            Say 'gradle wrapper: OK'
         }
 
         Say 'building (first run is slow: 5-15 min, downloading Minecraft + Fabric)' 'Yellow'
