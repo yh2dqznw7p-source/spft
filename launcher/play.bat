@@ -12,6 +12,11 @@ set "VER=fabric-loader-%FL%-%MCVER%"
 set "FI=https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
 set "JAR=https://github.com/yh2dqznw7p-source/spft/releases/latest/download/maxdlc-1.0.0.jar"
 
+rem Self-heal: if previous setup was marked "done" but key files are missing,
+rem wipe the marker so setup re-runs automatically.
+if exist "%DIR%\.installed" (
+    if not exist "%DIR%\mods\fabric-api.jar" del /q "%DIR%\.installed" >nul 2>&1
+)
 if exist "%DIR%\.installed" goto :run
 
 echo [maxDLC] First-time setup, please wait...
