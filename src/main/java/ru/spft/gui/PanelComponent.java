@@ -3,6 +3,8 @@ package ru.spft.gui;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import ru.spft.SpftClient;
+import ru.spft.gui.anim.Animation;
+import ru.spft.gui.anim.Easing;
 import ru.spft.module.Category;
 import ru.spft.module.Module;
 import ru.spft.setting.BooleanSetting;
@@ -10,6 +12,9 @@ import ru.spft.setting.KeySetting;
 import ru.spft.setting.ModeSetting;
 import ru.spft.setting.NumberSetting;
 import ru.spft.setting.Setting;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Панель категории в стиле rockstar DropDown:
@@ -39,6 +44,7 @@ public class PanelComponent {
 
     private final Category category;
     private final int x, y;
+    private final int index;
 
     private Module selectedModule;
     private int moduleScroll = 0;
@@ -50,11 +56,17 @@ public class PanelComponent {
     private KeySetting listeningKey;
     private Module bindingModule;
 
-    public PanelComponent(Category category, int x, int y) {
+    /** Плавный hover для каждой строки модуля, как у rockstar через BAKEK_SMALLER. */
+    private final Map<Module, Animation> hoverAnim = new HashMap<>();
+
+    public PanelComponent(Category category, int x, int y, int index) {
         this.category = category;
         this.x = x;
         this.y = y;
+        this.index = index;
     }
+
+    public int getIndex() { return index; }
 
     public int width()  { return ClickGuiScreen.PANEL_W; }
     public int height() { return ClickGuiScreen.PANEL_H; }
@@ -127,8 +139,15 @@ public class PanelComponent {
             boolean hovered = mouseY >= cy && mouseY < cy + ROW_H
                     && mouseX >= cx && mouseX < cx + width()
                     && mouseY >= y + SEP_Y && mouseY < y + height();
-            if (hovered) ctx.fill(cx, cy, cx + width(), cy + ROW_H,
-                    ClickGuiScreen.withAlpha(COLOR_HOVER, alpha));
+
+            // плавная hover-подсветка (rockstar BAKEK_SMALLER)
+            Animation h = hoverAnim.computeIfAbsent(m, k -> new Animation(180L, 0f, Easing.BAKEK_SMALLER));
+            h.update(hovered);
+            float hv = h.getValue();
+            if (hv > 0f) {
+                int col = ClickGuiScreen.withAlpha(COLOR_HOVER, alpha * hv);
+                ctx.fill(cx, cy, cx + width(), cy + ROW_H, col);
+            }
 
             if (m.isEnabled()) {
                 ctx.fill(cx, cy, cx + 2, cy + ROW_H,
@@ -136,7 +155,7 @@ public class PanelComponent {
             }
 
             int txt = m.isEnabled() ? COLOR_ACCENT : COLOR_TEXT;
-            ctx.drawTextWithShadow(tr, m.getName(), cx + 8, cy + 5,
+            ctx.drawTextWithShadow(tr, m.getName(), cx + 8 + (int) (hv * 2f), cy + 5,
                     ClickGuiScreen.withAlpha(txt, alpha));
 
             if (hasVisibleSettings(m)) {

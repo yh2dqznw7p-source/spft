@@ -6,6 +6,8 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import ru.spft.SpftClient;
+import ru.spft.gui.anim.Animation;
+import ru.spft.gui.anim.Easing;
 import ru.spft.module.Category;
 
 import java.util.ArrayList;
@@ -30,17 +32,18 @@ public class ClickGuiScreen extends Screen {
     public static final int PANEL_H = 240;
     public static final int PANEL_SPACING = 10;
 
-    private static final long ANIM_MS = 260;
+    private static final long ANIM_MS = 320;
+    /** Задержка появления каждой следующей панели (stagger), мс. Как в rockstar через BAKEK_PAGES. */
+    private static final long PANEL_STAGGER_MS = 45;
 
     private final List<PanelComponent> panels = new ArrayList<>();
 
     private boolean searchOpen = false;
     private String searchText = "";
 
-    // анимация open/close
-    private long openStart = 0;
+    // одна общая "пружина" 0..1: 1 = открыт, 0 = закрыт. BAKEK — их фирменный easing.
+    private final Animation openness = new Animation(ANIM_MS, 0f, Easing.BAKEK);
     private boolean closing = false;
-    private long closeStart = 0;
     private boolean actuallyClosed = false;
 
     public ClickGuiScreen() {
@@ -50,15 +53,15 @@ public class ClickGuiScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        if (openStart == 0) openStart = System.currentTimeMillis();
         panels.clear();
         Category[] cats = Category.values();
         int totalW = cats.length * PANEL_W + (cats.length - 1) * PANEL_SPACING;
         int startX = (this.width - totalW) / 2;
         int y = (this.height - PANEL_H) / 2;
         for (int i = 0; i < cats.length; i++) {
-            panels.add(new PanelComponent(cats[i], startX + i * (PANEL_W + PANEL_SPACING), y));
+            panels.add(new PanelComponent(cats[i], startX + i * (PANEL_W + PANEL_SPACING), y, i));
         }
+        openness.setValue(0f); // при (пере)инициализации экрана стартуем с 0
     }
 
     @Override
@@ -68,19 +71,9 @@ public class ClickGuiScreen extends Screen {
 
     // ===== анимация =====
 
-    private static float easeOutCubic(float t) { float u = 1f - t; return 1f - u * u * u; }
-    private static float easeInCubic(float t) { return t * t * t; }
-
-    /** 1.0 — полностью открыт, 0.0 — полностью закрыт. */
-    private float progress() {
-        if (actuallyClosed) return 0f;
-        long now = System.currentTimeMillis();
-        if (closing) {
-            float p = Math.min(1f, (now - closeStart) / (float) ANIM_MS);
-            return 1f - easeInCubic(p);
-        }
-        float p = Math.min(1f, (now - openStart) / (float) ANIM_MS);
-        return easeOutCubic(p);
+    /** Общий прогресс "открытости" окна (1 = открыт, 0 = закрыт). */
+    public float getGlobalProgress() {
+        return openness.getValue();
     }
 
     /** Умножить альфа-канал цвета на множитель 0..1. Используется панелями. */
@@ -94,13 +87,15 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // 1) Блюр мира + стандартное затемнение (встроено в Screen#renderBackground)
+        // Блюр мира + стандартное затемнение (встроенный Screen#renderBackground)
         super.renderBackground(ctx, mouseX, mouseY, delta);
 
-        float p = progress();
+        // тик анимации: тянемся к 1 пока открываемся, к 0 — пока закрываемся
+        openness.update(closing ? 0f : 1f);
+        float p = openness.getValue();
 
         // закончили close-анимацию — теперь реально закрываем
-        if (closing && p <= 0.001f && !actuallyClosed) {
+        if (closing && openness.isDone() && p <= 0.001f && !actuallyClosed) {
             actuallyClosed = true;
             if (SpftClient.get() != null) {
                 SpftClient.get().getConfigManager().save(SpftClient.get());
@@ -109,15 +104,15 @@ public class ClickGuiScreen extends Screen {
             return;
         }
 
-        // Дополнительный тонирующий слой для glass-эффекта (поверх блюра)
+        // Тонирующий слой для glass-эффекта (поверх блюра)
         ctx.fill(0, 0, this.width, this.height, withAlpha(0x60101014, p));
 
-        // 2) Анимация: scale+fade вокруг центра экрана
-        float scale = 0.94f + 0.06f * p;
+        // Общая анимация сцены: scale+fade вокруг центра экрана
+        float globalScale = 0.92f + 0.08f * p;
         MatrixStack ms = ctx.getMatrices();
         ms.push();
         ms.translate(this.width / 2f, this.height / 2f, 0f);
-        ms.scale(scale, scale, 1f);
+        ms.scale(globalScale, globalScale, 1f);
         ms.translate(-this.width / 2f, -this.height / 2f, 0f);
 
         // заголовок сверху
@@ -126,10 +121,11 @@ public class ClickGuiScreen extends Screen {
         ctx.drawTextWithShadow(this.textRenderer, title,
                 (this.width - titleW) / 2, 8, withAlpha(0xFFFFFFFF, p));
 
-        // панели
+        // панели — каждая со своим staggered-прогрессом
         String desc = "";
         for (PanelComponent pc : panels) {
-            pc.render(ctx, this.textRenderer, mouseX, mouseY, searchText, p);
+            float panelP = panelStaggered(p, pc.getIndex(), panels.size());
+            pc.render(ctx, this.textRenderer, mouseX, mouseY, searchText, panelP);
             String d = pc.getHoveredDescription(mouseX, mouseY);
             if (d != null) desc = d;
         }
@@ -166,6 +162,21 @@ public class ClickGuiScreen extends Screen {
         }
 
         ms.pop();
+    }
+
+    /**
+     * Растянутое "появление" — каждая следующая панель стартует чуть позже.
+     * Маппит общий прогресс 0..1 в нестрогий локальный 0..1 для конкретной панели.
+     */
+    private static float panelStaggered(float global, int index, int total) {
+        float range = 1f - (PANEL_STAGGER_MS / (float) ANIM_MS) * Math.max(0, total - 1);
+        range = Math.max(0.1f, range);
+        float start = (PANEL_STAGGER_MS / (float) ANIM_MS) * index;
+        float local = (global - start) / range;
+        if (local < 0f) local = 0f;
+        if (local > 1f) local = 1f;
+        // BAKEK_PAGES — их фирменный easing для страничного появления
+        return Easing.BAKEK_PAGES.ease(local, 0f, 1f, 1f);
     }
 
     // ===== input =====
@@ -235,10 +246,7 @@ public class ClickGuiScreen extends Screen {
     @Override
     public void close() {
         // не закрываем сразу — запускаем close-анимацию.
-        // реальный super.close() вызывается в render() после progress() -> 0.
-        if (!closing) {
-            closing = true;
-            closeStart = System.currentTimeMillis();
-        }
+        // реальный super.close() вызывается в render() после openness -> 0.
+        closing = true;
     }
 }
