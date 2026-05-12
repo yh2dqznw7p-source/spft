@@ -139,8 +139,15 @@ function Main {
     if ($needClone) {
         if (Test-Path $WORK_DIR) { Remove-Item $WORK_DIR -Recurse -Force }
         Say "cloning into $WORK_DIR"
-        & git clone --branch $BRANCH --depth 1 $REPO_URL $WORK_DIR 2>&1 | Out-String | Write-Host
-        if ($LASTEXITCODE -ne 0) { Fail 'git clone failed' }
+        # git clone writes "Cloning into '...'" to STDERR, so under
+        # ErrorActionPreference=Stop PS treats it as a terminating error.
+        # Switch to Continue for the duration of this command.
+        $prev = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & cmd /c "git clone --branch $BRANCH --depth 1 $REPO_URL `"$WORK_DIR`" 2>&1"
+        $cloneExit = $LASTEXITCODE
+        $ErrorActionPreference = $prev
+        if ($cloneExit -ne 0) { Fail "git clone failed (exit $cloneExit)" }
     }
 
     Push-Location $WORK_DIR
