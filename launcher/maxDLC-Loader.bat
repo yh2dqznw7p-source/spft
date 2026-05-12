@@ -90,7 +90,7 @@ echo [3/5] Downloading Fabric API...
 call :download "%FABRIC_API_URL%" "%MODS_DIR%\fabric-api.jar" || goto :err_dl
 
 echo [4/5] Downloading maxDLC...
-call :download "%MAXDLC_URL%" "%MODS_DIR%\maxdlc.jar" || goto :err_dl
+call :download "%MAXDLC_URL%" "%MODS_DIR%\maxdlc.jar" || goto :err_no_release
 
 rem --- optional optimizations ------------------------------------------------
 
@@ -141,5 +141,30 @@ exit /b 0
 
 :err_dl
 echo [!] Download failed. Check your internet connection.
+pause
+exit /b 1
+
+:err_no_release
+echo.
+echo [!] maxdlc.jar could not be downloaded from the GitHub release.
+echo     Probably the release is not published yet. Build it yourself:
+echo         git clone https://github.com/yh2dqznw7p-source/spft
+echo         cd spft
+echo         gradlew.bat build
+echo         copy build\libs\maxdlc-1.0.0.jar "%MODS_DIR%\maxdlc.jar"
+echo.
+pause
+exit /b 1
+
+:err_no_release
+echo.
+echo [!] maxdlc.jar could not be downloaded.
+echo     Probably the GitHub release is not published yet.
+echo     Build it yourself:
+echo         git clone https://github.com/yh2dqznw7p-source/spft
+echo         cd spft
+echo         gradlew.bat build
+echo         copy build\libs\maxdlc-1.0.0.jar "%MODS_DIR%\maxdlc.jar"
+echo.
 pause
 exit /b 1
