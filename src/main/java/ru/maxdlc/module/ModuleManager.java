@@ -7,6 +7,7 @@ import ru.maxdlc.module.impl.misc.AutoInstallMods;
 import ru.maxdlc.module.impl.misc.ClickGuiModule;
 import ru.maxdlc.module.impl.movement.AutoSprint;
 import ru.maxdlc.module.impl.player.AutoSwap;
+import ru.maxdlc.module.impl.player.NoSlow;
 import ru.maxdlc.module.impl.visual.AntiInvisible;
 import ru.maxdlc.module.impl.visual.NoRender;
 import ru.maxdlc.module.impl.visual.TargetEsp;
@@ -27,6 +28,7 @@ public class ModuleManager {
         register(new AutoSprint());
         // Player
         register(new AutoSwap());
+        register(new NoSlow());
         // Visual
         register(new NoRender());
         register(new TargetEsp());
