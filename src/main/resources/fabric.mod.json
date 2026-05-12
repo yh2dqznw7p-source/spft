@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "spft",
+  "version": "${version}",
+  "name": "SPFT Client",
+  "description": "Топовый клиент для Minecraft 1.21.4 — AimAssist, TriggerBot, AutoSprint, NoRender, TargetESP, AntiInvisible и ClickGUI.",
+  "authors": [
+    "spft"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/spft/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "ru.spft.SpftClient"
+    ]
+  },
+  "mixins": [
+    "spft.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
