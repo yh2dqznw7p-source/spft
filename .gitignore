@@ -22,3 +22,7 @@ Thumbs.db
 # Fabric / Loom
 run/
 remappedSrc/
+
+# Incoming reference sources (not for compile)
+_incoming/
+*.zip
