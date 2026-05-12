@@ -16,7 +16,7 @@ import ru.maxdlc.module.impl.visual.AntiInvisible;
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixin {
 
-    @Inject(method = "getAlpha", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getAlpha", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
     private void spft$antiInvisibleAlpha(LivingEntityRenderState state, CallbackInfoReturnable<Float> cir) {
         if (MaxDLCClient.get() == null) return;
         AntiInvisible ai = MaxDLCClient.get().getModuleManager().getModule(AntiInvisible.class);

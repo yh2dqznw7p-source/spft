@@ -19,7 +19,7 @@ import java.util.List;
 @Mixin(InGameHud.class)
 public abstract class InGameHudMixin {
 
-    @Inject(method = "renderOverlays", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "renderOverlays", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
     private void spft$noOverlays(DrawContext context, float tickDelta, CallbackInfo ci) {
         NoRender nr = noRender();
         if (nr != null && nr.isEnabled() &&
