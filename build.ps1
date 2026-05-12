@@ -3,21 +3,17 @@
 # Run in PowerShell (one line):
 #   iwr "https://raw.githubusercontent.com/yh2dqznw7p-source/spft/incoming/build.ps1?nocache=$(Get-Random)" -UseBasicParsing | iex
 #
-# What it does:
-#   1. installs git via winget/choco if missing
-#   2. installs Temurin JDK 21 if missing
-#   3. clones (or updates) repo into %USERPROFILE%\spft-build on 'incoming' branch
-#   4. generates gradle wrapper (downloads Gradle if needed)
-#   5. runs .\gradlew build
-#   6. copies built jar into %APPDATA%\.minecraft\mods\maxDLC.jar
-#   7. downloads Fabric API 1.21.4 if not present
-#
-# NOTE: do NOT use exit here. This script is usually piped into iex,
-# where 'exit' kills the whole PowerShell window and the user cannot
-# see the error. Instead we throw/return and print a clear message.
+# NOTES
+#   - NO 'exit' and NO ErrorActionPreference=Stop here. Script is piped into iex,
+#     any terminating error would kill the whole window before user sees the error.
+#   - Native commands (git, curl, winget, gradle) print to stderr even on success.
+#     We never trust stderr, only $LASTEXITCODE.
+#   - Big downloads go through BITS (Start-BitsTransfer) which has a native
+#     Windows progress bar and never touches stderr.
 
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'Continue'
+# IMPORTANT: leave default 'Continue' so stderr from native apps stays informational.
+$ErrorActionPreference = 'Continue'
+$ProgressPreference    = 'Continue'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 $REPO_URL    = 'https://github.com/yh2dqznw7p-source/spft.git'
@@ -28,66 +24,90 @@ $OUT_JAR     = Join-Path $MODS_DIR 'maxDLC.jar'
 $FABRIC_URL  = 'https://cdn.modrinth.com/data/P7dR8mSH/versions/rH00tDfh/fabric-api-0.118.0%2B1.21.4.jar'
 $FABRIC_NAME = 'fabric-api-0.118.0+1.21.4.jar'
 
+$Global:SPFT_FAILED = $false
 function Say($m,$c='Cyan'){ Write-Host "[SPFT] $m" -ForegroundColor $c }
-function Fail($m){ Write-Host "[SPFT][FAIL] $m" -ForegroundColor Red; throw $m }
+function Fail($m){
+    Write-Host "[SPFT][FAIL] $m" -ForegroundColor Red
+    $Global:SPFT_FAILED = $true
+}
 
 function DL($url,$out,$label){
     Say "downloading $label"
-    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        & curl.exe -L --fail --retry 3 --progress-bar -o $out $url
-        if ($LASTEXITCODE -ne 0) { Fail "download failed: $url" }
-    } else {
-        Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+    $ok = $false
+    # Try BITS first (nice progress, no stderr nonsense).
+    try {
+        Import-Module BitsTransfer -ErrorAction SilentlyContinue
+        if (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+            Start-BitsTransfer -Source $url -Destination $out -ErrorAction Stop
+            $ok = $true
+        }
+    } catch { $ok = $false }
+    if (-not $ok) {
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
+            $ok = $true
+        } catch { $ok = $false }
     }
+    if (-not $ok -or -not (Test-Path $out)) {
+        Fail "download failed: $url"
+        return $false
+    }
+    return $true
 }
 
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
 }
 
+function Run-Cmd($cmdline) {
+    # Run a native command and return $LASTEXITCODE; never throws.
+    & cmd /c "$cmdline"
+    return $LASTEXITCODE
+}
+
 function Ensure-Git {
-    if (Get-Command git -ErrorAction SilentlyContinue) { Say 'git: OK'; return }
+    if (Get-Command git -ErrorAction SilentlyContinue) { Say 'git: OK'; return $true }
     Say 'git not found, installing...' 'Yellow'
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        & winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements | Out-Null
+        Run-Cmd 'winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements' | Out-Null
     } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        & choco install git -y | Out-Null
+        Run-Cmd 'choco install git -y' | Out-Null
     } else {
         Fail 'no winget/choco. install git manually: https://git-scm.com/download/win then re-run.'
+        return $false
     }
     Refresh-Path
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Fail 'git installed but PATH not refreshed. CLOSE PowerShell and run script again.'
+        return $false
     }
     Say 'git: installed'
+    return $true
 }
 
 function Ensure-Java {
     $need = $true
     if (Get-Command java -ErrorAction SilentlyContinue) {
-        $out = ''
-        try {
-            $prev = $ErrorActionPreference
-            $ErrorActionPreference = 'SilentlyContinue'
-            $out = (& cmd /c 'java -version 2>&1') -join "`n"
-            $ErrorActionPreference = $prev
-        } catch { $out = '' }
+        $out = (& cmd /c 'java -version 2>&1') -join "`n"
         $m = [regex]::Match($out,'version "(\d+)')
         if ($m.Success -and [int]$m.Groups[1].Value -ge 21) {
-            Say "java: OK ($($m.Groups[1].Value))"; $need = $false
+            Say "java: OK ($($m.Groups[1].Value))"
+            $need = $false
         } else {
             Say 'java found but not 21+, installing Temurin 21' 'Yellow'
         }
     } else {
         Say 'java not found, installing Temurin 21' 'Yellow'
     }
-    if (-not $need) { return }
+    if (-not $need) { return $true }
+
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        & winget install --id EclipseAdoptium.Temurin.21.JDK -e --silent --accept-source-agreements --accept-package-agreements | Out-Null
+        Run-Cmd 'winget install --id EclipseAdoptium.Temurin.21.JDK -e --silent --accept-source-agreements --accept-package-agreements' | Out-Null
     } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        & choco install temurin21 -y | Out-Null
+        Run-Cmd 'choco install temurin21 -y' | Out-Null
     } else {
         Fail 'install JDK 21 manually: https://adoptium.net/temurin/releases/?version=21'
+        return $false
     }
     Refresh-Path
     $env:JAVA_HOME = [Environment]::GetEnvironmentVariable('JAVA_HOME','Machine')
@@ -98,8 +118,10 @@ function Ensure-Java {
     }
     if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
         Fail 'Java installed but PATH not refreshed. CLOSE PowerShell and re-run.'
+        return $false
     }
     Say 'java: installed'
+    return $true
 }
 
 function Main {
@@ -107,47 +129,32 @@ function Main {
     Say '  SPFT / maxDLC auto-builder'
     Say '============================================'
 
-    Ensure-Git
-    Ensure-Java
+    if (-not (Ensure-Git))  { return }
+    if (-not (Ensure-Java)) { return }
 
-    # try to update existing clone. If anything goes wrong (missing branch,
-    # partial clone, shallow-vs-non-shallow mismatch), just nuke and reclone.
+    # reuse existing clone if possible, otherwise wipe & reclone
     $needClone = $true
     if (Test-Path (Join-Path $WORK_DIR '.git')) {
         Say "updating repo in $WORK_DIR"
         Push-Location $WORK_DIR
-        try {
-            $prev = $ErrorActionPreference
-            $ErrorActionPreference = 'Continue'
-            & git fetch origin $BRANCH *>&1 | Out-String | Out-Null
-            $fetchOk = ($LASTEXITCODE -eq 0)
-            if ($fetchOk) {
-                & git checkout -B $BRANCH "origin/$BRANCH" *>&1 | Out-String | Out-Null
-                $coOk = ($LASTEXITCODE -eq 0)
-                if ($coOk) {
-                    & git reset --hard "origin/$BRANCH" *>&1 | Out-String | Out-Null
-                    if ($LASTEXITCODE -eq 0) { $needClone = $false }
-                }
+        Run-Cmd "git fetch origin $BRANCH 2>&1" | Out-Null
+        $okF = ($LASTEXITCODE -eq 0)
+        if ($okF) {
+            Run-Cmd "git checkout -B $BRANCH origin/$BRANCH 2>&1" | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Run-Cmd "git reset --hard origin/$BRANCH 2>&1" | Out-Null
+                if ($LASTEXITCODE -eq 0) { $needClone = $false }
             }
-            $ErrorActionPreference = $prev
-        } finally { Pop-Location }
-        if ($needClone) {
-            Say 'local repo is in a weird state, wiping and recloning' 'Yellow'
         }
+        Pop-Location
+        if ($needClone) { Say 'local repo is in a weird state, wiping and recloning' 'Yellow' }
     }
 
     if ($needClone) {
         if (Test-Path $WORK_DIR) { Remove-Item $WORK_DIR -Recurse -Force }
         Say "cloning into $WORK_DIR"
-        # git clone writes "Cloning into '...'" to STDERR, so under
-        # ErrorActionPreference=Stop PS treats it as a terminating error.
-        # Switch to Continue for the duration of this command.
-        $prev = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        & cmd /c "git clone --branch $BRANCH --depth 1 $REPO_URL `"$WORK_DIR`" 2>&1"
-        $cloneExit = $LASTEXITCODE
-        $ErrorActionPreference = $prev
-        if ($cloneExit -ne 0) { Fail "git clone failed (exit $cloneExit)" }
+        Run-Cmd "git clone --branch $BRANCH --depth 1 $REPO_URL `"$WORK_DIR`" 2>&1" | Out-Null
+        if ($LASTEXITCODE -ne 0) { Fail "git clone failed (exit $LASTEXITCODE)"; return }
     }
 
     Push-Location $WORK_DIR
@@ -157,26 +164,26 @@ function Main {
             if (-not (Get-Command gradle -ErrorAction SilentlyContinue)) {
                 Say 'gradle not installed, downloading distribution (~130 MB)' 'Yellow'
                 $zip = Join-Path $env:TEMP 'gradle-8.10-bin.zip'
-                DL 'https://services.gradle.org/distributions/gradle-8.10-bin.zip' $zip 'Gradle 8.10'
+                if (-not (DL 'https://services.gradle.org/distributions/gradle-8.10-bin.zip' $zip 'Gradle 8.10')) { return }
                 $dir = Join-Path $env:USERPROFILE 'spft-gradle'
                 if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
                 Say 'extracting Gradle...'
-                Expand-Archive $zip -DestinationPath $dir
+                Expand-Archive $zip -DestinationPath $dir -Force
                 $bin = (Get-ChildItem $dir -Directory | Select-Object -First 1).FullName + '\bin'
                 $env:Path = "$bin;$env:Path"
             }
             Say 'running gradle wrapper...'
-            & cmd /c 'gradle wrapper --gradle-version 8.10 --no-daemon 2>&1'
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path '.\gradlew.bat')) { Fail 'gradle wrapper did not create gradlew.bat' }
+            Run-Cmd 'gradle wrapper --gradle-version 8.10 --no-daemon 2>&1'
+            if (-not (Test-Path '.\gradlew.bat')) { Fail 'gradle wrapper did not create gradlew.bat'; return }
         }
 
         Say 'building (first run is slow: 5-15 min, downloading Minecraft + Fabric)' 'Yellow'
-        & cmd /c '.\gradlew.bat build --no-daemon 2>&1'
-        if ($LASTEXITCODE -ne 0) { Fail 'build failed (see log above)' }
+        Run-Cmd '.\gradlew.bat build --no-daemon 2>&1'
+        if ($LASTEXITCODE -ne 0) { Fail 'build failed (see log above)'; return }
 
         $jar = Get-ChildItem 'build\libs' -Filter 'spft-*.jar' -ErrorAction SilentlyContinue |
                Where-Object Name -notmatch '(sources|dev|javadoc)' | Select-Object -First 1
-        if (-not $jar) { Fail 'no jar in build\libs' }
+        if (-not $jar) { Fail 'no jar in build\libs'; return }
 
         if (-not (Test-Path $MODS_DIR)) { New-Item -ItemType Directory -Path $MODS_DIR -Force | Out-Null }
         Copy-Item $jar.FullName $OUT_JAR -Force
@@ -185,10 +192,9 @@ function Main {
 
     $hasFabric = Get-ChildItem $MODS_DIR -Filter 'fabric-api-*.jar' -ErrorAction SilentlyContinue
     if (-not $hasFabric) {
-        try {
-            DL $FABRIC_URL (Join-Path $MODS_DIR $FABRIC_NAME) 'Fabric API 0.118.0 (MC 1.21.4)'
+        if (DL $FABRIC_URL (Join-Path $MODS_DIR $FABRIC_NAME) 'Fabric API 0.118.0 (MC 1.21.4)') {
             Say 'Fabric API: installed' 'Green'
-        } catch {
+        } else {
             Say 'Fabric API download failed. install manually: https://modrinth.com/mod/fabric-api' 'Yellow'
         }
     } else {
@@ -204,12 +210,13 @@ function Main {
     Say '============================================' 'Green'
 }
 
-try {
-    Main
-} catch {
-    Write-Host ''
-    Write-Host "[SPFT][FAIL] $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ''
+Main
+
+Write-Host ''
+if ($Global:SPFT_FAILED) {
+    Write-Host '[SPFT] finished with errors (see above)' -ForegroundColor Red
+} else {
+    Write-Host '[SPFT] finished OK' -ForegroundColor Green
 }
 Write-Host 'Press Enter to close...' -ForegroundColor Gray
 try { [void][System.Console]::ReadLine() } catch {}
