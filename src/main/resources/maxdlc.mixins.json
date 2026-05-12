@@ -9,7 +9,8 @@
     "MinecraftClientMixin",
     "ParticleManagerMixin",
     "WorldRendererMixin",
-    "LivingEntityRendererMixin"
+    "LivingEntityRendererMixin",
+    "EntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

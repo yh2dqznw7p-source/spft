@@ -19,12 +19,22 @@ import java.util.List;
 @Mixin(InGameHud.class)
 public abstract class InGameHudMixin {
 
-    @Inject(method = "renderOverlays", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
-    private void spft$noOverlays(DrawContext context, float tickDelta, CallbackInfo ci) {
+    // В 1.21.4 yarn метод называется renderMiscOverlays, а не renderOverlays.
+    // Держим require=0 на случай, если в других yarn-ревизиях он снова переименован.
+    @Inject(method = "renderMiscOverlays", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
+    private void spft$noMiscOverlays(DrawContext context, net.minecraft.client.render.RenderTickCounter tc, CallbackInfo ci) {
         NoRender nr = noRender();
         if (nr != null && nr.isEnabled() &&
                 (nr.noPumpkinOverlay.getValue() || nr.noPortalOverlay.getValue() || nr.noOverlayFire.getValue())) {
-            // простейший вариант — отключить все оверлеи разом, если любая опция активна
+            ci.cancel();
+        }
+    }
+
+    // Точечный вариант — только огонь-оверлей на экране, если метод существует отдельно.
+    @Inject(method = "renderFireOverlay", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
+    private void spft$noFireOverlay(DrawContext context, CallbackInfo ci) {
+        NoRender nr = noRender();
+        if (nr != null && nr.isEnabled() && nr.noOverlayFire.getValue()) {
             ci.cancel();
         }
     }
