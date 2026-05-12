@@ -1,13 +1,16 @@
 package ru.maxdlc.module;
 
 import ru.maxdlc.module.impl.combat.AimAssist;
+import ru.maxdlc.module.impl.combat.KillAura;
 import ru.maxdlc.module.impl.combat.TriggerBot;
 import ru.maxdlc.module.impl.misc.AutoInstallMods;
 import ru.maxdlc.module.impl.misc.ClickGuiModule;
 import ru.maxdlc.module.impl.movement.AutoSprint;
+import ru.maxdlc.module.impl.player.AutoSwap;
 import ru.maxdlc.module.impl.visual.AntiInvisible;
 import ru.maxdlc.module.impl.visual.NoRender;
 import ru.maxdlc.module.impl.visual.TargetEsp;
+import ru.maxdlc.module.impl.visual.TargetHud;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,12 +22,16 @@ public class ModuleManager {
         // Combat
         register(new AimAssist());
         register(new TriggerBot());
+        register(new KillAura());
         // Movement
         register(new AutoSprint());
+        // Player
+        register(new AutoSwap());
         // Visual
         register(new NoRender());
         register(new TargetEsp());
         register(new AntiInvisible());
+        register(new TargetHud());
         // Misc
         register(new ClickGuiModule());
         register(new AutoInstallMods());

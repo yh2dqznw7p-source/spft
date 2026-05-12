@@ -10,13 +10,12 @@ import ru.maxdlc.MaxDLCClient;
 import ru.maxdlc.module.impl.visual.AntiInvisible;
 
 /**
- * Перекрывает расчёт альфа-канала для невидимых игроков — вместо 0.15
- * рендерим их с заданной настройкой opacity (по умолчанию 50%).
+ * AntiInvisible: увеличивает альфа невидимых сущностей до заданного процента.
  */
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixin {
 
-    @Inject(method = "getAlpha", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getAlpha", at = @At("HEAD"), cancellable = true, require = 0, expect = 0)
     private void spft$antiInvisibleAlpha(LivingEntityRenderState state, CallbackInfoReturnable<Float> cir) {
         if (MaxDLCClient.get() == null) return;
         AntiInvisible ai = MaxDLCClient.get().getModuleManager().getModule(AntiInvisible.class);
