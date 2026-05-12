@@ -5,6 +5,7 @@ import ru.maxdlc.module.impl.combat.KillAura;
 import ru.maxdlc.module.impl.combat.TriggerBot;
 import ru.maxdlc.module.impl.misc.AutoInstallMods;
 import ru.maxdlc.module.impl.misc.ClickGuiModule;
+import ru.maxdlc.module.impl.misc.CustomMainMenu;
 import ru.maxdlc.module.impl.movement.AutoSprint;
 import ru.maxdlc.module.impl.player.AutoSwap;
 import ru.maxdlc.module.impl.player.NoSlow;
@@ -37,6 +38,7 @@ public class ModuleManager {
         // Misc
         register(new ClickGuiModule());
         register(new AutoInstallMods());
+        register(new CustomMainMenu());
     }
 
     private void register(Module module) {
