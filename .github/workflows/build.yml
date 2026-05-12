@@ -1,0 +1,59 @@
+name: Build maxDLC
+
+on:
+  push:
+    branches: [ incoming, main, feat/spft-client ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate wrapper if missing
+        run: |
+          if [ ! -f ./gradlew ]; then
+            gradle wrapper --gradle-version 8.10 --no-daemon
+          fi
+          chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Find JAR
+        id: find_jar
+        run: |
+          JAR=$(ls build/libs/spft-*.jar | grep -v sources | grep -v dev | grep -v javadoc | head -n 1)
+          echo "jar_path=$JAR" >> $GITHUB_OUTPUT
+          cp "$JAR" "maxDLC.jar"
+
+      - name: Upload artifact (for workflow page)
+        uses: actions/upload-artifact@v4
+        with:
+          name: maxDLC
+          path: maxDLC.jar
+
+      - name: Publish latest release (on incoming/main only)
+        if: github.ref == 'refs/heads/incoming' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: maxDLC latest (auto)
+          body: |
+            Automated build of branch `${{ github.ref_name }}` (commit `${{ github.sha }}`).
+            Download `maxDLC.jar` below and drop into `%APPDATA%\.minecraft\mods\`.
+          files: maxDLC.jar
+          make_latest: "true"
