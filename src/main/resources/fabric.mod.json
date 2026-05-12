@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "id": "spft",
+  "id": "maxdlc",
   "version": "${version}",
-  "name": "SPFT Client",
+  "name": "maxDLC",
   "description": "Топовый клиент для Minecraft 1.21.4 — AimAssist, TriggerBot, AutoSprint, NoRender, TargetESP, AntiInvisible и ClickGUI.",
   "authors": [
-    "spft"
+    "maxdlc"
   ],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/spft/icon.png",
+  "icon": "assets/maxdlc/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [
-      "ru.spft.SpftClient"
+      "ru.maxdlc.MaxDLCClient"
     ]
   },
   "mixins": [
-    "spft.mixins.json"
+    "maxdlc.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.16.0",
