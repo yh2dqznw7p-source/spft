@@ -27,9 +27,18 @@ public abstract class ParticleManagerMixin {
             cir.setReturnValue(null);
             return;
         }
+        String id = parameters.getType().toString();
         if (nr.noBlockBreakParticles.getValue()) {
-            String id = parameters.getType().toString();
             if (id.contains("block") || id.contains("minecraft:block")) {
+                cir.setReturnValue(null);
+                return;
+            }
+        }
+        if (nr.noFire.getValue()) {
+            if (id.contains("flame")         // flame, soul_fire_flame, small_flame
+                    || id.contains("lava")       // lava
+                    || id.contains("campfire")   // campfire_cosy_smoke, campfire_signal_smoke
+                    || id.contains("smoke")) {
                 cir.setReturnValue(null);
             }
         }
