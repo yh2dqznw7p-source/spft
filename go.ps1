@@ -1,64 +1,53 @@
-# go.ps1 — bootstrapper for SPFT/maxDLC build.ps1.
+# go.ps1 - bootstrapper for SPFT/maxDLC build.ps1.
 #
 # Single-line runner:
 #   iwr "https://raw.githubusercontent.com/yh2dqznw7p-source/spft/incoming/go.ps1?nocache=$(Get-Random)" -UseBasicParsing | iex
 #
-# What it does:
-#   1. downloads build.ps1 into %TEMP%\spft-build.ps1
-#   2. launches it in a NEW PowerShell window with -NoExit, so the window
-#      never auto-closes no matter what, and you can scroll/copy the log
-#   3. tees everything into %USERPROFILE%\Desktop\spft-build.log so that
-#      even if something unexpected happens you have the full trace
+# Approach:
+#   1. Download build.ps1 into %TEMP% with an explicit UTF-8 BOM (so PS5.1 parses it correctly).
+#   2. Generate a .cmd wrapper that invokes build.ps1 and ends with `pause`.
+#   3. Launch the .cmd in its own cmd.exe window.
+#
+# Why a .cmd wrapper instead of powershell -NoExit: cmd `pause` is 100% reliable
+# on every Windows from XP onward, while PowerShell -NoExit can be bypassed by
+# an internal `exit` or host termination. The .cmd window simply cannot close
+# until the user presses a key.
 
 $ErrorActionPreference = 'Continue'
 
-$srcUrl = "https://raw.githubusercontent.com/yh2dqznw7p-source/spft/incoming/build.ps1?nocache=$(Get-Random)"
-$dest   = Join-Path $env:TEMP 'spft-build.ps1'
+$srcUrl   = "https://raw.githubusercontent.com/yh2dqznw7p-source/spft/incoming/build.ps1?nocache=$(Get-Random)"
+$buildPs1 = Join-Path $env:TEMP 'spft-build.ps1'
+$runCmd   = Join-Path $env:TEMP 'spft-run.cmd'
 
 Write-Host '[GO] downloading build.ps1 ...' -ForegroundColor Cyan
 try {
-    # download as string, then save with explicit UTF-8 BOM so Windows
-    # PowerShell 5.1 does not mis-parse it in cp1251 and break on any
-    # non-ASCII character.
+    # Download as bytes, decode as UTF-8, save with UTF-8 BOM.
     $resp = Invoke-WebRequest -Uri $srcUrl -UseBasicParsing -ErrorAction Stop
     $text = [System.Text.Encoding]::UTF8.GetString($resp.Content)
     $utf8bom = New-Object System.Text.UTF8Encoding $true
-    [System.IO.File]::WriteAllText($dest, $text, $utf8bom)
+    [System.IO.File]::WriteAllText($buildPs1, $text, $utf8bom)
 } catch {
     Write-Host "[GO][FAIL] cannot download build.ps1: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host 'Press Enter to close...' -ForegroundColor Gray
-    try { [void][System.Console]::ReadLine() } catch {}
     return
 }
 
-$desktop = [Environment]::GetFolderPath('Desktop')
-if (-not $desktop -or -not (Test-Path $desktop)) { $desktop = Join-Path $env:USERPROFILE 'Desktop' }
-if (-not (Test-Path $desktop)) { $desktop = Join-Path $env:USERPROFILE 'Рабочий стол' }
-$logFile = Join-Path $desktop 'spft-build.log'
-
-Write-Host '[GO] launching build in a new PowerShell window...' -ForegroundColor Cyan
-Write-Host "[GO] log will also be written to: $logFile" -ForegroundColor Cyan
-
-# -NoExit: окно НЕ закроется после завершения скрипта.
-# -NoProfile: без пользовательского профиля (стабильнее).
-# -ExecutionPolicy Bypass: обойти политику выполнения.
-# Tee-Object дублирует всё в лог-файл, чтобы даже если окно потеряется —
-# у пользователя на рабочем столе был полный лог.
-$launchCmd = @"
-& {
-    `$ErrorActionPreference = 'Continue'
-    try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
-    & '$dest' 2>&1 | Tee-Object -FilePath '$logFile'
-    Write-Host ''
-    Write-Host '======== build finished ========' -ForegroundColor Cyan
-    Write-Host ('log: ' + '$logFile') -ForegroundColor Gray
-    Write-Host 'This window will stay open. Close it manually when done.' -ForegroundColor Gray
-}
+$cmdText = @"
+@echo off
+chcp 65001 >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File `"$buildPs1`"
+echo.
+echo ================================================
+echo   build finished. window will stay open.
+echo   press any key to close.
+echo ================================================
+pause >nul
 "@
 
-Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-    '-NoExit','-NoProfile','-ExecutionPolicy','Bypass',
-    '-Command', $launchCmd
-) | Out-Null
+[System.IO.File]::WriteAllText($runCmd, $cmdText, [System.Text.Encoding]::ASCII)
 
-Write-Host '[GO] build window opened. You can close THIS window now.' -ForegroundColor Green
+Write-Host '[GO] launching build in a new window...' -ForegroundColor Cyan
+Write-Host '[GO] the window will stay open until you press a key.' -ForegroundColor Cyan
+
+Start-Process -FilePath $runCmd | Out-Null
+
+Write-Host '[GO] done. you can close THIS window.' -ForegroundColor Green
