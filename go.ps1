@@ -17,7 +17,13 @@ $dest   = Join-Path $env:TEMP 'spft-build.ps1'
 
 Write-Host '[GO] downloading build.ps1 ...' -ForegroundColor Cyan
 try {
-    Invoke-WebRequest -Uri $srcUrl -OutFile $dest -UseBasicParsing -ErrorAction Stop
+    # download as string, then save with explicit UTF-8 BOM so Windows
+    # PowerShell 5.1 does not mis-parse it in cp1251 and break on any
+    # non-ASCII character.
+    $resp = Invoke-WebRequest -Uri $srcUrl -UseBasicParsing -ErrorAction Stop
+    $text = [System.Text.Encoding]::UTF8.GetString($resp.Content)
+    $utf8bom = New-Object System.Text.UTF8Encoding $true
+    [System.IO.File]::WriteAllText($dest, $text, $utf8bom)
 } catch {
     Write-Host "[GO][FAIL] cannot download build.ps1: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host 'Press Enter to close...' -ForegroundColor Gray

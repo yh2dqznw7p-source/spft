@@ -21,8 +21,12 @@ $BRANCH      = 'incoming'
 $WORK_DIR    = Join-Path $env:USERPROFILE 'spft-build'
 # Build output goes to the user's Desktop (both English and Russian path variants checked).
 $DESKTOP = [Environment]::GetFolderPath('Desktop')
-if (-not $DESKTOP -or -not (Test-Path $DESKTOP)) { $DESKTOP = Join-Path $env:USERPROFILE 'Desktop' }
-if (-not (Test-Path $DESKTOP)) { $DESKTOP = Join-Path $env:USERPROFILE 'Рабочий стол' }
+if (-not $DESKTOP -or -not (Test-Path $DESKTOP)) {
+    $DESKTOP = Join-Path $env:USERPROFILE 'Desktop'
+}
+# if even that is missing, just pick user home — no non-ASCII strings here,
+# because the script itself would get mis-parsed if saved in a different codepage.
+if (-not (Test-Path $DESKTOP)) { $DESKTOP = $env:USERPROFILE }
 $OUT_JAR     = Join-Path $DESKTOP 'maxDLC.jar'
 
 $Global:SPFT_FAILED = $false
