@@ -53,9 +53,22 @@ function Ensure-Git {
 function Ensure-Java {
     $needInstall = $true
     if (Get-Command java -ErrorAction SilentlyContinue) {
-        $v = (& java -version 2>&1 | Select-String -Pattern 'version "(\d+)').Matches.Groups[1].Value
-        if ([int]$v -ge 21) { Say "java: OK ($v)"; $needInstall = $false }
-        else { Say "java версии $v, нужна 21+, доустанавливаю" 'Yellow' }
+        # java -version пишет в stderr — аккуратно вытаскиваем версию без падения скрипта
+        $out = ''
+        try {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'SilentlyContinue'
+            $out = (& cmd /c 'java -version 2>&1') -join "`n"
+            $ErrorActionPreference = $prev
+        } catch { $out = '' }
+        $m = [regex]::Match($out, 'version "(\d+)(?:\.(\d+))?')
+        if ($m.Success) {
+            $v = [int]$m.Groups[1].Value
+            if ($v -ge 21) { Say "java: OK ($v)"; $needInstall = $false }
+            else { Say "java версии $v, нужна 21+, доустанавливаю" 'Yellow' }
+        } else {
+            Say 'java найдена, но версию не распознал — ставлю Temurin 21' 'Yellow'
+        }
     } else {
         Say 'java не найдена, ставлю Temurin 21' 'Yellow'
     }
