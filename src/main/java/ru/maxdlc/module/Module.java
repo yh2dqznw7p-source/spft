@@ -93,6 +93,8 @@ public abstract class Module {
 
     public void onTick() {}
     public void onRender(float tickDelta) {}
+    /** Полный 3D-контекст рендера (matrices + camera). Вызывается вместе с onRender. */
+    public void onRender3D(RenderContext ctx) {}
 
     public String getDisplayInfo() {
         return null;

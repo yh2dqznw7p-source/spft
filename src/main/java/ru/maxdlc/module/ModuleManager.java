@@ -75,4 +75,10 @@ public class ModuleManager {
             try { m.onRender(tickDelta); } catch (Exception ignored) {}
         }
     }
+
+    public void onRender3D(RenderContext ctx) {
+        for (Module m : modules) if (m.isEnabled()) {
+            try { m.onRender3D(ctx); } catch (Exception ignored) {}
+        }
+    }
 }

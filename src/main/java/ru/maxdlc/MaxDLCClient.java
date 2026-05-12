@@ -13,6 +13,7 @@ import ru.maxdlc.command.CommandManager;
 import ru.maxdlc.config.ConfigManager;
 import ru.maxdlc.gui.ClickGuiScreen;
 import ru.maxdlc.module.ModuleManager;
+import ru.maxdlc.module.RenderContext;
 import ru.maxdlc.module.impl.misc.ClickGuiModule;
 
 public class MaxDLCClient implements ClientModInitializer {
@@ -48,9 +49,11 @@ public class MaxDLCClient implements ClientModInitializer {
         // Перехватываем клиентский чат для префикса команд ".xxx"
         ClientSendMessageEvents.ALLOW_CHAT.register(msg -> !commandManager.handle(msg));
 
-        // Рендер
+        // Рендер — и простой onRender(tickDelta), и полный onRender3D(matrices,camera,tickDelta).
         WorldRenderEvents.LAST.register(context -> {
-            moduleManager.onRender(context.tickCounter().getTickDelta(true));
+            float td = context.tickCounter().getTickDelta(true);
+            moduleManager.onRender(td);
+            moduleManager.onRender3D(new RenderContext(context.matrixStack(), context.camera(), td));
         });
 
         // Сохраняем конфиг при закрытии
