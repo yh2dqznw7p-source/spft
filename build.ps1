@@ -19,10 +19,11 @@ try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 $REPO_URL    = 'https://github.com/yh2dqznw7p-source/spft.git'
 $BRANCH      = 'incoming'
 $WORK_DIR    = Join-Path $env:USERPROFILE 'spft-build'
-$MODS_DIR    = Join-Path $env:APPDATA '.minecraft\mods'
-$OUT_JAR     = Join-Path $MODS_DIR 'maxDLC.jar'
-$FABRIC_URL  = 'https://cdn.modrinth.com/data/P7dR8mSH/versions/rH00tDfh/fabric-api-0.118.0%2B1.21.4.jar'
-$FABRIC_NAME = 'fabric-api-0.118.0+1.21.4.jar'
+# Build output goes to the user's Desktop (both English and Russian path variants checked).
+$DESKTOP = [Environment]::GetFolderPath('Desktop')
+if (-not $DESKTOP -or -not (Test-Path $DESKTOP)) { $DESKTOP = Join-Path $env:USERPROFILE 'Desktop' }
+if (-not (Test-Path $DESKTOP)) { $DESKTOP = Join-Path $env:USERPROFILE 'Рабочий стол' }
+$OUT_JAR     = Join-Path $DESKTOP 'maxDLC.jar'
 
 $Global:SPFT_FAILED = $false
 function Say($m,$c='Cyan'){ Write-Host "[SPFT] $m" -ForegroundColor $c }
@@ -185,28 +186,19 @@ function Main {
                Where-Object Name -notmatch '(sources|dev|javadoc)' | Select-Object -First 1
         if (-not $jar) { Fail 'no jar in build\libs'; return }
 
-        if (-not (Test-Path $MODS_DIR)) { New-Item -ItemType Directory -Path $MODS_DIR -Force | Out-Null }
+        if (-not (Test-Path $DESKTOP)) { New-Item -ItemType Directory -Path $DESKTOP -Force | Out-Null }
         Copy-Item $jar.FullName $OUT_JAR -Force
-        Say "installed: $OUT_JAR" 'Green'
+        Say "jar placed on Desktop: $OUT_JAR" 'Green'
     } finally { Pop-Location }
-
-    $hasFabric = Get-ChildItem $MODS_DIR -Filter 'fabric-api-*.jar' -ErrorAction SilentlyContinue
-    if (-not $hasFabric) {
-        if (DL $FABRIC_URL (Join-Path $MODS_DIR $FABRIC_NAME) 'Fabric API 0.118.0 (MC 1.21.4)') {
-            Say 'Fabric API: installed' 'Green'
-        } else {
-            Say 'Fabric API download failed. install manually: https://modrinth.com/mod/fabric-api' 'Yellow'
-        }
-    } else {
-        Say "Fabric API: already present ($($hasFabric.Name))" 'Green'
-    }
 
     Say ''
     Say '============================================' 'Green'
     Say '  DONE' 'Green'
     Say "  JAR: $OUT_JAR" 'Green'
-    Say '  Also install Fabric Loader 0.16+ for MC 1.21.4:' 'Green'
+    Say '  To run, drag it to %APPDATA%\.minecraft\mods\' 'Green'
+    Say '  You also need Fabric Loader 0.16+ + Fabric API for MC 1.21.4:' 'Green'
     Say '    https://fabricmc.net/use/installer/' 'Yellow'
+    Say '    https://modrinth.com/mod/fabric-api' 'Yellow'
     Say '============================================' 'Green'
 }
 
