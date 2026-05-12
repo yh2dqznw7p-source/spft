@@ -110,18 +110,36 @@ function Main {
     Ensure-Git
     Ensure-Java
 
+    # try to update existing clone. If anything goes wrong (missing branch,
+    # partial clone, shallow-vs-non-shallow mismatch), just nuke and reclone.
+    $needClone = $true
     if (Test-Path (Join-Path $WORK_DIR '.git')) {
         Say "updating repo in $WORK_DIR"
         Push-Location $WORK_DIR
         try {
-            & git fetch origin $BRANCH 2>&1 | Out-Null
-            & git checkout $BRANCH 2>&1 | Out-Null
-            & git reset --hard "origin/$BRANCH" 2>&1 | Out-Null
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            & git fetch origin $BRANCH *>&1 | Out-String | Out-Null
+            $fetchOk = ($LASTEXITCODE -eq 0)
+            if ($fetchOk) {
+                & git checkout -B $BRANCH "origin/$BRANCH" *>&1 | Out-String | Out-Null
+                $coOk = ($LASTEXITCODE -eq 0)
+                if ($coOk) {
+                    & git reset --hard "origin/$BRANCH" *>&1 | Out-String | Out-Null
+                    if ($LASTEXITCODE -eq 0) { $needClone = $false }
+                }
+            }
+            $ErrorActionPreference = $prev
         } finally { Pop-Location }
-    } else {
+        if ($needClone) {
+            Say 'local repo is in a weird state, wiping and recloning' 'Yellow'
+        }
+    }
+
+    if ($needClone) {
         if (Test-Path $WORK_DIR) { Remove-Item $WORK_DIR -Recurse -Force }
         Say "cloning into $WORK_DIR"
-        & git clone --branch $BRANCH --depth 1 $REPO_URL $WORK_DIR 2>&1
+        & git clone --branch $BRANCH --depth 1 $REPO_URL $WORK_DIR 2>&1 | Out-String | Write-Host
         if ($LASTEXITCODE -ne 0) { Fail 'git clone failed' }
     }
 
