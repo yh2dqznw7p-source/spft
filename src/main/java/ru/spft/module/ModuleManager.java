@@ -1,6 +1,7 @@
 package ru.spft.module;
 
 import ru.spft.module.impl.combat.AimAssist;
+import ru.spft.module.impl.combat.AutoSwap;
 import ru.spft.module.impl.combat.TriggerBot;
 import ru.spft.module.impl.misc.AutoInstallMods;
 import ru.spft.module.impl.misc.ClickGuiModule;
@@ -19,6 +20,7 @@ public class ModuleManager {
         // Combat
         register(new AimAssist());
         register(new TriggerBot());
+        register(new AutoSwap());
         // Movement
         register(new AutoSprint());
         // Visual

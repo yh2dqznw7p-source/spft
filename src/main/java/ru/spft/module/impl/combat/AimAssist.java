@@ -95,7 +95,15 @@ public class AimAssist extends Module {
             double distSq = self.squaredDistanceTo(le);
             if (distSq > rangeSq) continue;
 
-            if (!throughWalls.getValue() && !mc.player.canSee(le)) continue;
+            if (!throughWalls.getValue() && !mc.player.getWorld().raycast(
+                    new net.minecraft.world.RaycastContext(
+                            mc.player.getEyePos(),
+                            new Vec3d(le.getX(), le.getY() + le.getHeight() * 0.5, le.getZ()),
+                            net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
+                            net.minecraft.world.RaycastContext.FluidHandling.NONE,
+                            mc.player)).getType().equals(net.minecraft.util.hit.HitResult.Type.MISS)) {
+                continue;
+            }
 
             // FOV filter
             float[] rot = calcRotations(getAimPoint(le));

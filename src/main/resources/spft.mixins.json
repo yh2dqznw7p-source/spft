@@ -3,6 +3,7 @@
   "package": "ru.spft.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ChatInputSuggestorMixin",
     "ClientPlayerEntityMixin",
     "GameRendererMixin",
     "InGameHudMixin",
